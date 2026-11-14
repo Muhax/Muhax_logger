@@ -220,9 +220,7 @@ static void handleTap(const String& uid) {
 
 // ------------------------------------------------------------------ setup / loop
 void setup() {
-#ifndef PN532_UART
-  Serial.begin(115200);   // UART0 pins carry the PN532 in UART mode, so no debug output then
-#endif
+  Serial.begin(115200);   // UART0 is free: the PN532 uses GPIO35/22 (Serial2)
   pinMode(PIN_BOOT, INPUT_PULLUP);
   Led::begin();
   Ui::begin();
@@ -233,9 +231,7 @@ void setup() {
   Nfc::begin();
   Web::begin();
   Github::begin();
-#ifndef PN532_UART
   Serial.printf("MUHAX Logger %s (%s) SD=%d NFC=%d configured=%d\n", FW_VERSION, cfg.deviceId.c_str(), Storage::ok(), Nfc::ready(), cfg.configured);
-#endif
 
   lastActivity = millis();
   if (!cfg.configured) {
