@@ -5,9 +5,9 @@
 #define PIN_I2C_SDA   27   // PN532 SDA (side connector CN1)
 #define PIN_I2C_SCL   22   // PN532 SCL
 // PN532 over UART (define PN532_UART in platformio.ini): module TXD -> PIN_NFC_RX, module RXD -> PIN_NFC_TX
-// Default: the CYD serial connector (RXD/TXD/GND/5V) = UART0 pins GPIO3 (RX) and GPIO1 (TX).
-#define PIN_NFC_RX    3
-#define PIN_NFC_TX    1
+// Default: GPIO35 (RX, input-only pin, fine for receiving) and GPIO22 (TX), both on the CYD side connectors.
+#define PIN_NFC_RX    35
+#define PIN_NFC_TX    22
 #define PIN_SD_CS     5
 #define PIN_SD_SCK    18
 #define PIN_SD_MISO   19

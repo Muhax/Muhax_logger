@@ -1,6 +1,6 @@
 # MUHAX Logger (firmware)
 
-NFC check-in/out terminal for the **ESP32-2432S028R "CYD"** + **PN532** (I2C on GPIO 27/22). Design: see [muhax-logger.md](muhax-logger.md).
+NFC check-in/out terminal for the **ESP32-2432S028R "CYD"** + **PN532** (UART on GPIO 35 RX / GPIO 22 TX). Design: see [muhax-logger.md](muhax-logger.md).
 
 ## Build and flash
 
@@ -14,7 +14,8 @@ Display variants (the CYD has several revisions): try `cyd` first (ILI9341). If 
 inverted use `cyd_ili9341_inv`; for the 2-USB-port revision use `cyd_st7789`. They differ only in the TFT_eSPI flags in
 [platformio.ini](platformio.ini) (TFT_eSPI is configured there, no library files need editing).
 
-Wiring: PN532 in **I2C mode** -> 3.3 V, GND, SDA = GPIO 27, SCL = GPIO 22 (connector CN1). Insert a FAT32 microSD card.
+Wiring: PN532 in **HSU (UART) mode** (SEL0 = OFF, SEL1 = OFF) -> VCC = 3.3 V (or 5 V), GND, module TXD -> GPIO 35, module RXD -> GPIO 22. Insert a FAT32 microSD card.
+(For I2C instead, remove `-DPN532_UART=1` in platformio.ini and use SDA = GPIO 27, SCL = GPIO 22.)
 
 ## First use
 

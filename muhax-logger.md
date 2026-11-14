@@ -86,19 +86,19 @@ The tag quantities are enough for **testing only**. Order one tag per worker plu
 
 ### 4.3 Wiring
 
-The CYD has very few free pins: **GPIO 22 and 27** (side connector CN1, with 3.3 V and GND) are used by the PN532, and GPIO 35 is input-only. Everything else is used by the screen, touch, SD card and RGB LED.
+The CYD has very few free pins: **GPIO 22 and 35** (side connectors, with 3.3 V and GND) are used by the PN532 in UART mode. GPIO 35 is input-only, so it can only receive, which is exactly what the PN532's TXD line needs. Everything else is used by the screen, touch, SD card and RGB LED.
 
-| PN532 | CYD (connector CN1) |
+| PN532 | CYD |
 |---|---|
 | VCC | 3.3 V |
 | GND | GND |
-| SDA | GPIO 27 |
-| SCL | GPIO 22 |
+| TXD | GPIO 35 (ESP32 RX) |
+| RXD | GPIO 22 (ESP32 TX) |
 
-- PN532 mode switches: **I2C** (check the table printed on the board).
-- Power the PN532 from **3.3 V**, not 5 V: on some modules the I2C lines are pulled up to the supply voltage, and 5 V on the ESP32 pins can damage it.
-- In code: `Wire.begin(27, 22);` (SDA, SCL).
-- A DS3231 (optional) uses the same two wires (addresses differ: PN532 0x24, DS3231 0x68).
+- PN532 mode switches: **HSU / UART** (SEL0 = OFF, SEL1 = OFF; check the table printed on the board).
+- Power the PN532 from **3.3 V** so its TXD output is 3.3 V logic; 5 V logic on an ESP32 pin can damage it.
+- In code: `Serial2.begin(115200, SERIAL_8N1, 35, 22);` (RX, TX), see `PIN_NFC_RX` / `PIN_NFC_TX` in `src/config.h`.
+- I2C is not possible on GPIO 35 (input-only). The I2C alternative (remove `-DPN532_UART=1`) uses SDA = GPIO 27, SCL = GPIO 22; a DS3231 (optional) could then share those wires (PN532 0x24, DS3231 0x68).
 
 Usual internal pin map of the common CYD revision (verify before relying on it; revisions differ):
 

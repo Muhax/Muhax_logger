@@ -1,9 +1,8 @@
-// PN532 UART pin test (NOT the real firmware). The PN532 sits on the CYD serial connector (GPIO3 = RX, GPIO1 = TX),
-// so the USB serial port is unusable for output. Results are shown on the RGB LED instead:
+// PN532 UART pin test (NOT the real firmware). The PN532 uses GPIO35 = RX (module TXD) and GPIO22 = TX (module RXD).
+// Results are shown on the RGB LED:
 //   RED blinking       : no answer from the PN532 (check HSU mode switches, power, wires)
-//   GREEN solid        : PN532 answered, wiring correct (CYD RXD <- module TXD, CYD TXD -> module RXD)
-//   YELLOW solid       : PN532 answered only with RX/TX swapped (wires crossed the wrong way round)
-//   BLUE/WHITE flash   : a card was seen on the reader (flash colour = white when wiring is correct)
+//   GREEN solid        : PN532 answered, wiring correct
+//   WHITE flash        : a card was seen on the reader
 #include <Arduino.h>
 
 #define LED_R 4    // active low
@@ -61,16 +60,10 @@ void setup() {
 }
 
 void loop() {
-  // Order A is the intended wiring; order B has RX and TX swapped.
-  if (probe(3, 1)) {
+  // RX = GPIO35 (input-only), TX = GPIO22. A swapped wiring cannot be probed (GPIO35 cannot transmit).
+  if (probe(35, 22)) {
     led(false, true, false);
     if (cardSeen()) { led(true, true, true); delay(300); led(false, true, false); }
-    delay(100);
-    return;
-  }
-  if (probe(1, 3)) {
-    led(true, true, false);
-    if (cardSeen()) { led(false, false, true); delay(300); led(true, true, false); }
     delay(100);
     return;
   }
