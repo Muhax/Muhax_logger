@@ -83,6 +83,7 @@ static String pend[8];
 static int npend = 0;
 static uint32_t lastChange = 0;
 static bool workersDirty = false;
+static bool databaseUploadRequested = false;
 static volatile uint32_t lastGhOkMs = 0;
 static volatile bool ghLastOk = false;
 
@@ -328,6 +329,11 @@ static void markDirty(const String& day) {
   if (!have && npend < 8) pend[npend++] = day;
   lastChange = millis();
 }
+static void requestDatabaseUpload() {
+  Lock l(pendM);
+  databaseUploadRequested = true;
+  lastChange = 0;
+}
 static bool appendLog(const Worker& w, const char* action, const String& phone) {
   time_t now = time(nullptr);
   String path = "/muhax/logs/" + fmtTime(now, "%Y-%m-%d") + ".csv";
@@ -344,12 +350,13 @@ static bool appendLog(const Worker& w, const char* action, const String& phone) 
 }
 
 // ---------------------------------------------------------------- GitHub
-static void ghHeaders(HTTPClient& h) {
-  h.addHeader("Authorization", "Bearer " + cfg.ght);
+static void ghHeaders(HTTPClient& h, const String& token) {
+  h.addHeader("Authorization", "Bearer " + token);
   h.addHeader("Accept", "application/vnd.github+json");
   h.addHeader("X-GitHub-Api-Version", "2022-11-28");
   h.setUserAgent("muhax-logger");
 }
+static void ghHeaders(HTTPClient& h) { ghHeaders(h, cfg.ght); }
 static bool ghPut(const String& path, const String& content) {
   if (!cfg.ght.length() || !cfg.gho.length() || !cfg.ghr.length()) return false;
   WiFiClientSecure c;
@@ -395,24 +402,72 @@ static bool ghPut(const String& path, const String& content) {
   h2.end();
   return code == 200 || code == 201;
 }
+static bool ghUploadDatabase() {
+  String csv = "employee_id,name,active\n";
+  {
+    Lock l(sdM);
+    if (!sdOk) return false;
+    for (auto& w : workers) csv += w.id + "," + w.name + "," + (w.active ? "1" : "0") + "\n";
+  }
+  if (!ghPut("config/workers.csv", csv)) return false;
+
+  std::vector<String> files;
+  {
+    Lock l(sdM);
+    if (!sdOk) return false;
+    File dir = SD.open("/muhax/logs");
+    if (!dir || !dir.isDirectory()) {
+      if (dir) dir.close();
+      return false;
+    }
+    File entry = dir.openNextFile();
+    while (entry) {
+      if (!entry.isDirectory()) {
+        String name = entry.name();
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0) name = name.substring(slash + 1);
+        if (name.endsWith(".csv")) files.push_back(name);
+      }
+      entry.close();
+      entry = dir.openNextFile();
+    }
+    dir.close();
+  }
+
+  for (const String& name : files) {
+    String content = readAll("/muhax/logs/" + name);
+    if (content.length() == 0 || !ghPut("attendance/" + devId + "/" + name, content)) return false;
+  }
+  return true;
+}
 static void ghTask(void*) {
   for (;;) {
     vTaskDelay(5000 / portTICK_PERIOD_MS);
     if (setupMode || WiFi.status() != WL_CONNECTED || !timeOk()) continue;
     String day;
     bool wk = false;
+    bool database = false;
     uint32_t lc = 0;
     {
       Lock l(pendM);
-      if (millis() - lastChange >= (uint32_t)cfg.ghDelay * 1000UL) {
+      if (databaseUploadRequested) {
+        database = true;
+        databaseUploadRequested = false;
+      } else if (millis() - lastChange >= (uint32_t)cfg.ghDelay * 1000UL) {
         if (npend > 0) day = pend[0];
         wk = workersDirty;
         lc = lastChange;
       }
     }
-    if (day == "" && !wk) continue;
+    if (!database && day == "" && !wk) continue;
     bool ok = false;
-    if (day != "") {
+    if (database) {
+      ok = ghUploadDatabase();
+      if (!ok) {
+        Lock l(pendM);
+        databaseUploadRequested = true;
+      }
+    } else if (day != "") {
       String content = readAll("/muhax/logs/" + day + ".csv");
       ok = content.length() == 0 ? true : ghPut("attendance/" + devId + "/" + day + ".csv", content);
       if (ok) {
@@ -856,7 +911,7 @@ static void aSystem() {
   String note;
   if (server.method() == HTTP_POST) {
     String op = server.arg("op");
-    if (op == "sync") { markDirty(fmtTime(time(nullptr), "%Y-%m-%d")); { Lock l(pendM); lastChange = 0; } workersDirty = true; note = "<p>Upload queued.</p>"; }
+    if (op == "sync") { requestDatabaseUpload(); note = "<p>Full database upload queued.</p>"; }
     else if (op == "timesync") { resyncNow = true; note = "<p>Time sync requested.</p>"; }
     else if (op == "settime") {
       long e = server.arg("epoch").toInt();
@@ -865,7 +920,7 @@ static void aSystem() {
     else if (op == "setup") { prefs.begin("mx", false); prefs.putBool("force", true); prefs.end(); restartAt = millis() + 1500; note = "<p>Going to setup mode...</p>"; }
   }
   auto f = [](const char* op, const char* label, const char* cls = "") { return String("<form method=post><input type=hidden name=op value=") + op + "><button class='" + cls + "'>" + label + "</button></form>"; };
-  String b = nav() + note + f("sync", "Sync to GitHub now") + f("timesync", "Sync time now") +
+  String b = nav() + note + f("sync", "Upload database to GitHub now") + f("timesync", "Sync time now") +
              "<form method=post><input type=hidden name=op value=settime><input type=hidden name=epoch id=e><button onclick=\"document.getElementById('e').value=Math.floor(Date.now()/1000)\">Set time from my phone</button></form>" +
              f("restart", "Restart") + f("setup", "Go to setup mode (settings page)", "r");
   sendPage(200, "System", b);
@@ -877,18 +932,80 @@ static void sRoot() {
   String opts;
   for (int i = 0; i < n && i < 20; i++) opts += "<option value='" + esc(WiFi.SSID(i)) + "'>";
   bool have = configured();
-  String b = "<h2>MUHAX Logger setup</h2><form method=post action=/save>"
+  String b = "<h2>MUHAX Logger setup</h2><form id=setup-form method=post action=/save>"
              "<h3>Admin account</h3><input name=au placeholder='Admin username' value='" + esc(cfg.au) + "'><input name=ap type=password placeholder='Admin password (min 6)'>"
              "<h3>Company</h3><input name=co placeholder='Company name' value='" + esc(cfg.company) + "'>"
              "<h3>Company WiFi (2.4 GHz)</h3><input name=ssid list=nets placeholder=SSID value='" + esc(cfg.ssid) + "'><datalist id=nets>" + opts +
-             "</datalist><input name=wp type=password placeholder='WiFi password'>"
+             "</datalist><input name=wp type=password placeholder='WiFi password'><button type=button onclick=\"testSetup('/test/wifi')\">Test WiFi</button>"
              "<h3>Time</h3><input name=tz type=number value=" + String(cfg.tzh) + "> hours from UTC (Jordan = 3)<input name=sh type=number value=" + String(cfg.syncH) + "> re-sync every N hours"
              "<h3>GitHub (private repo)</h3><input name=gho placeholder='Owner' value='" + esc(cfg.gho) + "'><input name=ghr placeholder='Repo name' value='" + esc(cfg.ghr) +
-             "'><input name=ghb placeholder=Branch value='" + esc(cfg.ghb) + "'><input name=ght type=password placeholder='Fine-grained token (Contents: read/write)'>"
+             "'><input name=ghb placeholder=Branch value='" + esc(cfg.ghb) + "'><input name=ght type=password placeholder='Fine-grained token (Contents: read/write)'><button type=button onclick=\"testSetup('/test/github')\">Test GitHub</button>"
              "<h3>Workers</h3><textarea name=w rows=5 placeholder='One per line: id,name,pin&#10;pin may be blank (random)'></textarea>"
              "<h3>Options</h3><input name=qrr type=number value=" + String(cfg.qrr) + "> QR rotation seconds<input name=dbl type=number value=" + String(cfg.dbl) + "> double-tap seconds"
-             + (have ? "<p>Blank passwords/token keep the saved values.</p>" : "") + "<button>SAVE AND RESTART</button></form>";
+             + (have ? "<p>Blank passwords/token keep the saved values.</p>" : "") +
+             "<button>SAVE AND RESTART</button></form><p id=test-result role=status></p>"
+             "<script>async function testSetup(path){const result=document.getElementById('test-result');result.textContent='Testing...';try{const form=new FormData(document.getElementById('setup-form'));const body=new URLSearchParams();for(const [key,value] of form.entries())body.append(key,value);const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()});result.textContent=await response.text()}catch(error){result.textContent='Test request failed: '+error}}</script>";
   sendPage(200, "Setup", b);
+}
+static bool validGithubSegment(const String& value) {
+  if (!value.length() || value == "." || value == "..") return false;
+  for (size_t i = 0; i < value.length(); i++) {
+    char c = value[i];
+    if (!isAlphaNumeric(c) && c != '-' && c != '_' && c != '.') return false;
+  }
+  return true;
+}
+static void sTestWifi() {
+  String ssid = server.arg("ssid");
+  String password = server.arg("wp");
+  if (!ssid.length()) { server.send(400, "text/plain", "Enter a WiFi name first."); return; }
+  if (!password.length() && ssid == cfg.ssid) password = cfg.wpass;
+
+  WiFi.disconnect(false);
+  delay(100);
+  WiFi.begin(ssid.c_str(), password.c_str());
+  uint32_t started = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - started < 15000UL) delay(250);
+  bool connected = WiFi.status() == WL_CONNECTED;
+  String result = connected ? "WiFi connected successfully. IP: " + WiFi.localIP().toString()
+                            : "Could not connect to that WiFi. Check the name, password, and 2.4 GHz availability.";
+
+  WiFi.disconnect(false);
+  delay(100);
+  if (cfg.ssid.length()) WiFi.begin(cfg.ssid.c_str(), cfg.wpass.c_str());
+  server.send(connected ? 200 : 502, "text/plain", result);
+}
+static void sTestGithub() {
+  String owner = cleanField(server.arg("gho"));
+  String repo = cleanField(server.arg("ghr"));
+  String token = server.arg("ght");
+  if (!token.length()) token = cfg.ght;
+  if (!validGithubSegment(owner) || !validGithubSegment(repo)) {
+    server.send(400, "text/plain", "Enter a valid GitHub owner and repository name.");
+    return;
+  }
+  if (!token.length()) { server.send(400, "text/plain", "Enter a GitHub token first."); return; }
+
+  WiFiClientSecure client;
+#if GITHUB_INSECURE_TLS
+  client.setInsecure();
+#endif
+  client.setTimeout(15);
+  HTTPClient http;
+  http.setTimeout(15000);
+  String url = "https://api.github.com/repos/" + owner + "/" + repo;
+  if (!http.begin(client, url)) {
+    server.send(502, "text/plain", "Could not start the GitHub request.");
+    return;
+  }
+  ghHeaders(http, token);
+  int code = http.GET();
+  http.end();
+  if (code == 200) server.send(200, "text/plain", "GitHub connection and repository access OK.");
+  else if (code == 401) server.send(502, "text/plain", "GitHub rejected the token (HTTP 401).");
+  else if (code == 404) server.send(502, "text/plain", "Repository not found or token has no access (HTTP 404).");
+  else if (code < 0) server.send(502, "text/plain", "GitHub request failed: " + HTTPClient::errorToString(code));
+  else server.send(502, "text/plain", "GitHub check failed with HTTP " + String(code) + ".");
 }
 static void sSave() {
   String au = server.arg("au"), ap = server.arg("ap");
@@ -956,6 +1073,8 @@ static void routes() {
   server.collectHeaders(keys, 2);
   if (setupMode) {
     server.on("/", HTTP_GET, sRoot);
+    server.on("/test/wifi", HTTP_POST, sTestWifi);
+    server.on("/test/github", HTTP_POST, sTestGithub);
     server.on("/save", HTTP_POST, sSave);
     server.on("/admin", HTTP_GET, []() { redirect("/", 302); });
     server.onNotFound(sNotFound);

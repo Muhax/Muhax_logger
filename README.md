@@ -6,16 +6,16 @@ PlatformIO project for the ESP32-2432S028R "CYD". Open the folder in VS Code + P
 1. Insert a FAT32 microSD card, power the board.
 2. Join WiFi **Muhax_logger** (password shown on screen), open `http://192.168.4.1`, fill the form, save.
 3. The board restarts, joins the company WiFi, shows its address for 6 s, then the QR.
-4. Admin: `http://<ip>/admin` (or `http://muhax-logger.local/admin`).
+4. Before saving, use **Test WiFi** and **Test GitHub** on the setup page to check the entered settings. Admin: `http://<ip>/admin` (or `http://muhax-logger.local/admin`).
 
 ## Buttons
 - BOOT short press: info screen (with Join-WiFi QR). BOOT held 10 s: setup mode (workers and records are kept).
 
 ## What is implemented
-Rotating QR (HMAC, 30 s, accepts current + previous window), presence pass, ID+PIN login with salted hash, remember-this-phone cookie, lockout after 5 tries, double-tap protection, IN/OUT alternation with MISSING_OUT flag, SD logs per day, background GitHub upload of the whole day file (private repo, token in flash), NTP at start and every N hours, admin site (dashboard, workers, records, CSV export with BOM, system), setup AP + captive portal, recovery to setup after 2 min WiFi loss, RGB LED feedback.
+Rotating QR (HMAC, 30 s, accepts current + previous window), presence pass, ID+PIN login with salted hash, remember-this-phone cookie, lockout after 5 tries, double-tap protection, IN/OUT alternation with MISSING_OUT flag, SD logs per day, background GitHub upload of changed files, a System action to upload the complete attendance history and worker roster on demand (private repo, token in flash), NTP at start and every N hours, admin site (dashboard, workers, records, CSV export with BOM, system), setup AP + captive portal, recovery to setup after 2 min WiFi loss, RGB LED feedback.
 
 ## Deliberate simplifications (v1 of the code)
-- Setup is one form page, not a step-by-step wizard, and has no "Test" buttons for WiFi/GitHub. Settings are edited by returning to setup mode (blank passwords keep saved values).
+- Setup is one form page, not a step-by-step wizard. Its WiFi test temporarily connects with the entered network and then restores the saved connection; its GitHub test checks authenticated repository access without writing data. Blank passwords/token use saved values.
 - No touchscreen use (info screen is on the BOOT button) to avoid SPI conflicts between touch, display and SD.
 - SD card missing: check-ins are refused with an error (no flash queue yet).
 - GitHub TLS: `GITHUB_INSECURE_TLS 1` in main.cpp skips certificate checks. Replace with a root-CA / certificate bundle before real use.
