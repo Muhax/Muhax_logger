@@ -566,13 +566,20 @@ static void showInfo() {
 
 // ---------------------------------------------------------------- web: common
 static const char CSS[] PROGMEM =
-    "body{font-family:system-ui,sans-serif;max-width:440px;margin:auto;padding:14px;background:#f4f5f7}"
-    "input,select,textarea,button{width:100%;box-sizing:border-box;font-size:18px;padding:12px;margin:5px 0;border-radius:8px;border:1px solid #bbb}"
-    "button{background:#1565c0;color:#fff;border:0}button.g{background:#2e7d32}button.r{background:#c62828}"
-    "button.s{width:auto;font-size:14px;padding:6px 10px;margin:2px}"
-    "table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid #ddd;padding:4px;text-align:start}"
-    ".big{font-size:28px;font-weight:700;text-align:center;padding:30px;border-radius:12px;color:#fff}"
-    ".in{background:#2e7d32}.out{background:#c62828}.err{color:#c62828}a{color:#1565c0}nav a{margin-inline-end:10px}";
+    "*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:1120px;margin:auto;padding:26px 22px;background:#f4f7fb;color:#17233b;line-height:1.5}"
+    "h1,h2,h3,p{margin-top:0}h1{font-size:clamp(26px,4vw,36px);line-height:1.15;letter-spacing:-.04em;margin-bottom:8px}h2{font-size:25px;letter-spacing:-.03em}h3{font-size:17px}"
+    "a{color:#315ce8;text-decoration:none}a:hover{text-decoration:underline}header.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:0 0 22px;border-bottom:1px solid #e2e8f2;margin-bottom:30px}"
+    ".brand{display:flex;align-items:center;gap:10px;color:#17233b;font-weight:800;letter-spacing:.04em;white-space:nowrap}.brand:hover{text-decoration:none}.brand-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#315ce8;color:#fff;font-size:17px}.brand small{font-size:10px;color:#8290a8;letter-spacing:.12em}"
+    ".nav-links{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.nav-links a{padding:8px 11px;border-radius:9px;color:#65728a;font-size:14px;font-weight:650}.nav-links a:hover{background:#e9eef8;color:#2449cd;text-decoration:none}"
+    "input,select,textarea,button{width:100%;font:inherit;font-size:16px;padding:12px 14px;margin:5px 0;border-radius:10px;border:1px solid #d6deea;background:#fff;color:#17233b}"
+    "input:focus,select:focus,textarea:focus{outline:3px solid #315ce822;border-color:#315ce8}label{display:block;font-size:13px;font-weight:700;color:#44516a;margin-top:12px}"
+    "button{background:#315ce8;color:#fff;border:0;font-weight:750;cursor:pointer;transition:background .15s,transform .15s}button:hover{background:#2449cd;transform:translateY(-1px)}button.g{background:#16835d}button.g:hover{background:#106a4b}button.r{background:#c44747}button.r:hover{background:#a93434}"
+    "button.s{width:auto;font-size:13px;padding:7px 10px;margin:2px;border-radius:8px}table{border-collapse:collapse;width:100%;font-size:14px;background:#fff;border-radius:12px;overflow:hidden}td,th{border-bottom:1px solid #e8edf4;padding:11px 12px;text-align:start}th{background:#f8faff;color:#69768d;font-size:12px;text-transform:uppercase;letter-spacing:.05em}tr:last-child td{border-bottom:0}"
+    ".topbar{align-items:center}.big{font-size:28px;font-weight:750;text-align:center;padding:30px;border-radius:16px;color:#fff}.in{background:#16835d}.out{background:#c44747}.err{color:#b42336}"
+    ".auth-shell{width:min(100%,440px);margin:7vh auto}.auth-card{padding:clamp(24px,6vw,40px);background:#fff;border:1px solid #e5eaf2;border-radius:22px;box-shadow:0 18px 55px #25365712}.auth-brand{margin-bottom:30px}.auth-kicker,.eyebrow{font-size:11px;font-weight:800;color:#315ce8;letter-spacing:.13em;text-transform:uppercase}.auth-copy,.muted{color:#78859b}.auth-copy{margin-bottom:26px}.login-form{margin-top:20px}.remember{display:flex;align-items:center;gap:9px;margin:14px 0;color:#647188;font-weight:500}.remember input{width:17px;height:17px;margin:0;accent-color:#315ce8}.auth-card button{margin-top:12px}.auth-foot{font-size:12px;text-align:center;color:#8a96aa;margin:22px 0 0}.alert{padding:11px 13px;border-radius:10px;background:#fff1f1;color:#ae2634;font-size:14px;font-weight:650;margin:14px 0}"
+    ".dashboard{display:grid;gap:24px}.page-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px}.page-heading p{color:#78859b;margin-bottom:0}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.metric,.panel{background:#fff;border:1px solid #e5eaf2;border-radius:16px;padding:20px;box-shadow:0 5px 18px #25365708}.metric-label{display:block;color:#78859b;font-size:13px;font-weight:650}.metric strong{display:block;font-size:32px;line-height:1.2;letter-spacing:-.04em;margin:9px 0}.metric-note{font-size:12px;color:#8a96aa}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.panel-head h2{font-size:18px;margin:0}.panel-head a{font-size:13px;font-weight:700}.status{display:inline-flex;align-items:center;gap:7px;border-radius:20px;padding:5px 9px;background:#e9f7f0;color:#14734f;font-size:12px;font-weight:750}.status:before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor}.status.warn{background:#fff4df;color:#98630c}.people{list-style:none;padding:0;margin:0}.people li{display:flex;justify-content:space-between;gap:14px;padding:13px 0;border-bottom:1px solid #edf0f5}.people li:last-child{border-bottom:0}.person-name{font-weight:700}.person-meta{font-size:13px;color:#78859b}.empty{padding:22px 0;color:#78859b;text-align:center}.quick-links{display:flex;gap:10px;flex-wrap:wrap}.quick-links a{padding:9px 12px;border:1px solid #e0e6f0;border-radius:9px;background:#fff;font-size:13px;font-weight:700}"
+    "@media(max-width:760px){body{padding:18px 14px}header.topbar{align-items:flex-start;flex-direction:column;gap:13px;margin-bottom:22px}.nav-links{width:100%;gap:3px}.nav-links a{padding:7px 9px;font-size:13px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric,.panel{padding:16px}.page-heading{align-items:flex-start;flex-direction:column}}"
+    "@media(max-width:420px){.metrics{gap:9px}.metric{padding:13px}.metric strong{font-size:27px}.people li{flex-direction:column;gap:2px}td,th{padding:8px 7px;font-size:12px}}";
 static String page(const String& title, const String& body) {
   return "<!doctype html><html dir=auto><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" +
          esc(title) + "</title><style>" + String(FPSTR(CSS)) + "</style></head><body>" + body + "</body></html>";
@@ -649,11 +656,13 @@ static void hQ() {
   redirect("/me", 302);
 }
 static void loginForm(const String& err) {
-  sendPage(200, "Login", "<h2>MUHAX Logger</h2><p class=err>" + esc(err) +
-                             "</p><form method=post action=/login><label>Employee ID</label><input name=id autocomplete=username required>"
-                             "<label>PIN</label><input name=pin type=password inputmode=numeric autocomplete=current-password required>"
-                             "<label><input type=checkbox name=rem value=1 checked style='width:auto'> Remember this phone</label>"
-                             "<button>LOGIN</button></form>");
+  String message = err.length() ? "<div class=alert role=alert>" + esc(err) + "</div>" : "";
+  sendPage(200, "Employee sign in", "<main class=auth-shell><section class=auth-card><div class='brand auth-brand'><span class=brand-icon>M</span><span>MUHAX <small>LOGGER</small></span></div>"
+                                    "<div class=auth-kicker>Employee portal</div><h1>Welcome back</h1><p class=auth-copy>Sign in to continue to your attendance.</p>" + message +
+                                    "<form class=login-form method=post action=/login><label for=employee-id>Employee ID</label><input id=employee-id name=id placeholder='Enter your ID' autocomplete=username required>"
+                                    "<label for=employee-pin>PIN</label><input id=employee-pin name=pin type=password inputmode=numeric pattern='[0-9]{4,6}' maxlength=6 placeholder='4-6 digit PIN' autocomplete=current-password required>"
+                                    "<label class=remember><input type=checkbox name=rem value=1 checked>Remember this phone</label>"
+                                    "<button type=submit>Sign in</button></form><p class=auth-foot>Secure check-in powered by MUHAX Logger</p></section></main>");
 }
 static void hMe() {
   if (!passValid()) { scanAgain(); return; }
@@ -717,16 +726,39 @@ static bool adminOk() {
 }
 #define NEED_ADMIN if (!adminOk()) return;
 static String nav() {
-  return "<nav><a href=/admin>Dashboard</a><a href=/admin/workers>Workers</a><a href=/admin/records>Records</a><a href=/admin/export>Export</a><a href=/admin/system>System</a></nav><hr>";
+  return "<header class=topbar><a class=brand href=/admin><span class=brand-icon>M</span><span>MUHAX <small>LOGGER</small></span></a>"
+         "<nav class=nav-links><a href=/admin>Overview</a><a href=/admin/workers>Workers</a><a href=/admin/records>Records</a><a href=/admin/export>Export</a><a href=/admin/system>System</a></nav></header>";
 }
 static void aDash() {
   NEED_ADMIN
-  String b = nav() + "<h3>" + esc(cfg.company) + "</h3><p>Inside now: <b>" + String(insideCount()) + "</b><br>Time: " +
-             (timeOk() ? fmtTime(time(nullptr), "%Y-%m-%d %H:%M:%S") : String("not set")) + (timeTrusted() ? " (trusted)" : " (NOT trusted)") +
-             "<br>SD: " + (sdOk ? "OK" : "MISSING") + "<br>GitHub: " + (ghLastOk ? "last upload OK" : "not synced") + ", pending days: " + String(npend) + "</p><ul>";
-  for (auto& w : workers)
-    if (w.active && w.lastAct == 1 && sameDay(w.lastEpoch, time(nullptr))) b += "<li>" + esc(w.name) + " (" + esc(w.id) + ") since " + fmtTime(w.lastEpoch, "%H:%M") + "</li>";
-  sendPage(200, "Dashboard", b + "</ul>");
+  time_t now = time(nullptr);
+  int activeWorkers = 0;
+  for (auto& w : workers) if (w.active) activeWorkers++;
+  bool haveTime = timeOk();
+  String company = cfg.company.length() ? esc(cfg.company) : String("Attendance overview");
+  String syncStatus = ghLastOk ? "Synced" : "Waiting";
+  String timeStatus = timeTrusted() ? "Trusted" : (haveTime ? "Needs sync" : "Not set");
+  String b = nav() + "<main class=dashboard><section class=page-heading><div><div class=eyebrow>Overview</div><h1>" + company +
+             "</h1><p>Live attendance and device health at a glance.</p></div><span class='status" + String(ghLastOk ? "" : " warn") + "'>" +
+             syncStatus + "</span></section><section class=metrics><article class=metric><span class=metric-label>Currently checked in</span><strong>" +
+             String(insideCount()) + "</strong><span class=metric-note>Workers on site today</span></article><article class=metric><span class=metric-label>Active workers</span><strong>" +
+             String(activeWorkers) + "</strong><span class=metric-note>Enabled employee accounts</span></article><article class=metric><span class=metric-label>SD storage</span><strong>" +
+             (sdOk ? String("Ready") : String("Missing")) + "</strong><span class=metric-note>" + (sdOk ? "Attendance logs available" : "Check-ins cannot be saved") +
+             "</span></article><article class=metric><span class=metric-label>GitHub queue</span><strong>" + String(npend) +
+             "</strong><span class=metric-note>Pending upload days</span></article></section><section class=panel><div class=panel-head><h2>Currently on site</h2><a href=/admin/records>View records</a></div><ul class=people>";
+  int present = 0;
+  for (auto& w : workers) {
+    if (w.active && w.lastAct == 1 && sameDay(w.lastEpoch, now)) {
+      b += "<li><span class=person-name>" + esc(w.name) + "<span class=person-meta> &middot; " + esc(w.id) +
+           "</span></span><span class=person-meta>Checked in at " + fmtTime(w.lastEpoch, "%H:%M") + "</span></li>";
+      present++;
+    }
+  }
+  if (!present) b += "<li class=empty>No one is currently checked in.</li>";
+  b += "</ul></section><section class=panel><div class=panel-head><h2>Device status</h2><span class='status" + String(timeTrusted() ? "" : " warn") +
+       "'>" + timeStatus + "</span></div><p class=muted>" + (haveTime ? fmtTime(now, "%Y-%m-%d %H:%M:%S") : String("Device time has not been set yet.")) +
+       "</p><div class=quick-links><a href=/admin/workers>Manage workers</a><a href=/admin/export>Export attendance</a><a href=/admin/system>System settings</a></div></section></main>";
+  sendPage(200, "Dashboard", b);
 }
 static void aWorkers() {
   NEED_ADMIN
