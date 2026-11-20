@@ -21,6 +21,37 @@
 #include <esp_system.h>
 #include <esp_sntp.h>
 
+#ifndef MUHAX_WIFI_SSID
+#define MUHAX_WIFI_SSID ""
+#endif
+#ifndef MUHAX_WIFI_PASSWORD
+#define MUHAX_WIFI_PASSWORD ""
+#endif
+#ifndef MUHAX_WIFI_IP
+#define MUHAX_WIFI_IP ""
+#endif
+#ifndef MUHAX_WIFI_GATEWAY
+#define MUHAX_WIFI_GATEWAY ""
+#endif
+#ifndef MUHAX_WIFI_SUBNET
+#define MUHAX_WIFI_SUBNET ""
+#endif
+#ifndef MUHAX_WIFI_DNS
+#define MUHAX_WIFI_DNS ""
+#endif
+#ifndef MUHAX_GITHUB_OWNER
+#define MUHAX_GITHUB_OWNER ""
+#endif
+#ifndef MUHAX_GITHUB_REPO
+#define MUHAX_GITHUB_REPO ""
+#endif
+#ifndef MUHAX_GITHUB_BRANCH
+#define MUHAX_GITHUB_BRANCH "main"
+#endif
+#ifndef MUHAX_GITHUB_TOKEN
+#define MUHAX_GITHUB_TOKEN ""
+#endif
+
 // ---------------------------------------------------------------- pins
 #define PIN_LED_R 4
 #define PIN_LED_G 16
@@ -200,20 +231,44 @@ static void startNtp() {
   configTzTime(tz.c_str(), "pool.ntp.org", "time.google.com");
   lastResync = millis();
 }
+static bool configureStationNetwork(String* error = nullptr) {
+  String ipText = MUHAX_WIFI_IP;
+  if (!ipText.length()) return true;
+
+  IPAddress ip, gateway, subnet, dns;
+  if (!ip.fromString(ipText.c_str()) || !gateway.fromString(MUHAX_WIFI_GATEWAY) ||
+      !subnet.fromString(MUHAX_WIFI_SUBNET)) {
+    if (error) *error = "Static IP needs valid IP, gateway, and subnet values in the build environment.";
+    return false;
+  }
+  String dnsText = MUHAX_WIFI_DNS;
+  if (dnsText.length()) {
+    if (!dns.fromString(dnsText.c_str())) {
+      if (error) *error = "Static IP DNS value is invalid.";
+      return false;
+    }
+  } else dns = gateway;
+  if (!WiFi.config(ip, gateway, subnet, dns)) {
+    if (error) *error = "Could not apply the static IP configuration.";
+    return false;
+  }
+  return true;
+}
 
 // ---------------------------------------------------------------- config
 static void loadCfg() {
   prefs.begin("mx", true);
-  cfg.ssid = prefs.getString("ssid", "");
-  cfg.wpass = prefs.getString("wpass", "");
+  cfg.ssid = prefs.getString("ssid", MUHAX_WIFI_SSID);
+  cfg.wpass = prefs.getString("wpass", MUHAX_WIFI_PASSWORD);
   cfg.company = prefs.getString("co", "");
   cfg.au = prefs.getString("au", "");
   cfg.asalt = prefs.getString("as", "");
   cfg.ah = prefs.getString("ah", "");
-  cfg.gho = prefs.getString("gho", "");
-  cfg.ghr = prefs.getString("ghr", "");
-  cfg.ghb = prefs.getString("ghb", "main");
-  cfg.ght = prefs.getString("ght", "");
+  cfg.gho = prefs.getString("gho", MUHAX_GITHUB_OWNER);
+  cfg.ghr = prefs.getString("ghr", MUHAX_GITHUB_REPO);
+  cfg.ghb = prefs.getString("ghb", MUHAX_GITHUB_BRANCH);
+  if (!cfg.ghb.length()) cfg.ghb = "main";
+  cfg.ght = prefs.getString("ght", MUHAX_GITHUB_TOKEN);
   cfg.qrs = prefs.getString("qrs", "");
   cfg.cks = prefs.getString("cks", "");
   cfg.tzh = prefs.getInt("tz", 3);
@@ -936,16 +991,23 @@ static void sRoot() {
              "<h3>Admin account</h3><input name=au placeholder='Admin username' value='" + esc(cfg.au) + "'><input name=ap type=password placeholder='Admin password (min 6)'>"
              "<h3>Company</h3><input name=co placeholder='Company name' value='" + esc(cfg.company) + "'>"
              "<h3>Company WiFi (2.4 GHz)</h3><input name=ssid list=nets placeholder=SSID value='" + esc(cfg.ssid) + "'><datalist id=nets>" + opts +
-             "</datalist><input name=wp type=password placeholder='WiFi password'><button type=button onclick=\"testSetup('/test/wifi')\">Test WiFi</button>"
+             "</datalist><input name=wp type=password placeholder='WiFi password'><button type=submit formaction=/test/wifi formtarget=test-result>Test WiFi</button>"
              "<h3>Time</h3><input name=tz type=number value=" + String(cfg.tzh) + "> hours from UTC (Jordan = 3)<input name=sh type=number value=" + String(cfg.syncH) + "> re-sync every N hours"
              "<h3>GitHub (private repo)</h3><input name=gho placeholder='Owner' value='" + esc(cfg.gho) + "'><input name=ghr placeholder='Repo name' value='" + esc(cfg.ghr) +
-             "'><input name=ghb placeholder=Branch value='" + esc(cfg.ghb) + "'><input name=ght type=password placeholder='Fine-grained token (Contents: read/write)'><button type=button onclick=\"testSetup('/test/github')\">Test GitHub</button>"
+             "'><input name=ghb placeholder=Branch value='" + esc(cfg.ghb) + "'><input name=ght type=password placeholder='Fine-grained token (Contents: read/write)'><button type=submit formaction=/test/github formtarget=test-result>Test GitHub</button>"
              "<h3>Workers</h3><textarea name=w rows=5 placeholder='One per line: id,name,pin&#10;pin may be blank (random)'></textarea>"
              "<h3>Options</h3><input name=qrr type=number value=" + String(cfg.qrr) + "> QR rotation seconds<input name=dbl type=number value=" + String(cfg.dbl) + "> double-tap seconds"
              + (have ? "<p>Blank passwords/token keep the saved values.</p>" : "") +
-             "<button>SAVE AND RESTART</button></form><p id=test-result role=status></p>"
-             "<script>async function testSetup(path){const result=document.getElementById('test-result');result.textContent='Testing...';try{const form=new FormData(document.getElementById('setup-form'));const body=new URLSearchParams();for(const [key,value] of form.entries())body.append(key,value);const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()});result.textContent=await response.text()}catch(error){result.textContent='Test request failed: '+error}}</script>";
+             "<button>SAVE AND RESTART</button></form><h3>Test result</h3>"
+             "<iframe name=test-result title='WiFi or GitHub test result' style='width:100%;height:90px;border:1px solid #d6deea;border-radius:10px' "
+             "srcdoc='<!doctype html><html><body style=\"font:16px sans-serif;color:#647188\">Run a test to see its result.</body></html>'></iframe>";
   sendPage(200, "Setup", b);
+}
+static void sendTestResult(bool ok, const String& message) {
+  String color = ok ? "#16835d" : "#b42336";
+  server.send(200, "text/html; charset=utf-8",
+              "<!doctype html><html><meta name=viewport content='width=device-width,initial-scale=1'><body style='font:16px system-ui,sans-serif;color:" +
+                  color + ";margin:14px'><strong>" + String(ok ? "SUCCESS" : "FAILED") + "</strong><br>" + esc(message) + "</body></html>");
 }
 static bool validGithubSegment(const String& value) {
   if (!value.length() || value == "." || value == "..") return false;
@@ -958,8 +1020,10 @@ static bool validGithubSegment(const String& value) {
 static void sTestWifi() {
   String ssid = server.arg("ssid");
   String password = server.arg("wp");
-  if (!ssid.length()) { server.send(400, "text/plain", "Enter a WiFi name first."); return; }
+  if (!ssid.length()) { sendTestResult(false, "Enter a WiFi name first."); return; }
   if (!password.length() && ssid == cfg.ssid) password = cfg.wpass;
+  String networkError;
+  if (!configureStationNetwork(&networkError)) { sendTestResult(false, networkError); return; }
 
   WiFi.disconnect(false);
   delay(100);
@@ -973,7 +1037,7 @@ static void sTestWifi() {
   WiFi.disconnect(false);
   delay(100);
   if (cfg.ssid.length()) WiFi.begin(cfg.ssid.c_str(), cfg.wpass.c_str());
-  server.send(connected ? 200 : 502, "text/plain", result);
+  sendTestResult(connected, result);
 }
 static void sTestGithub() {
   String owner = cleanField(server.arg("gho"));
@@ -981,10 +1045,10 @@ static void sTestGithub() {
   String token = server.arg("ght");
   if (!token.length()) token = cfg.ght;
   if (!validGithubSegment(owner) || !validGithubSegment(repo)) {
-    server.send(400, "text/plain", "Enter a valid GitHub owner and repository name.");
+    sendTestResult(false, "Enter a valid GitHub owner and repository name.");
     return;
   }
-  if (!token.length()) { server.send(400, "text/plain", "Enter a GitHub token first."); return; }
+  if (!token.length()) { sendTestResult(false, "Enter a GitHub token first."); return; }
 
   WiFiClientSecure client;
 #if GITHUB_INSECURE_TLS
@@ -995,17 +1059,17 @@ static void sTestGithub() {
   http.setTimeout(15000);
   String url = "https://api.github.com/repos/" + owner + "/" + repo;
   if (!http.begin(client, url)) {
-    server.send(502, "text/plain", "Could not start the GitHub request.");
+    sendTestResult(false, "Could not start the GitHub request.");
     return;
   }
   ghHeaders(http, token);
   int code = http.GET();
   http.end();
-  if (code == 200) server.send(200, "text/plain", "GitHub connection and repository access OK.");
-  else if (code == 401) server.send(502, "text/plain", "GitHub rejected the token (HTTP 401).");
-  else if (code == 404) server.send(502, "text/plain", "Repository not found or token has no access (HTTP 404).");
-  else if (code < 0) server.send(502, "text/plain", "GitHub request failed: " + HTTPClient::errorToString(code));
-  else server.send(502, "text/plain", "GitHub check failed with HTTP " + String(code) + ".");
+  if (code == 200) sendTestResult(true, "GitHub connection and repository access OK.");
+  else if (code == 401) sendTestResult(false, "GitHub rejected the token (HTTP 401).");
+  else if (code == 404) sendTestResult(false, "Repository not found or token has no access (HTTP 404).");
+  else if (code < 0) sendTestResult(false, "GitHub request failed: " + HTTPClient::errorToString(code));
+  else sendTestResult(false, "GitHub check failed with HTTP " + String(code) + ".");
 }
 static void sSave() {
   String au = server.arg("au"), ap = server.arg("ap");
@@ -1115,6 +1179,8 @@ static void startSetup() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
   WiFi.softAP(AP_SSID, apPass.c_str());
+  String networkError;
+  if (!configureStationNetwork(&networkError)) Serial.println(networkError);
   if (cfg.ssid.length()) WiFi.begin(cfg.ssid.c_str(), cfg.wpass.c_str());  // recovery: keep trying the saved network
   dns.start(53, "*", IPAddress(192, 168, 4, 1));
   routes();
@@ -1126,6 +1192,8 @@ static void startRun() {
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(MDNS_NAME);
   WiFi.setAutoReconnect(true);
+  String networkError;
+  if (!configureStationNetwork(&networkError)) Serial.println(networkError);
   WiFi.begin(cfg.ssid.c_str(), cfg.wpass.c_str());
   drawNotice("Connecting WiFi...", cfg.ssid, 0x2104);
   uint32_t t0 = millis();
