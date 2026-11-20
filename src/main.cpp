@@ -21,37 +21,6 @@
 #include <esp_system.h>
 #include <esp_sntp.h>
 
-#ifndef MUHAX_WIFI_SSID
-#define MUHAX_WIFI_SSID ""
-#endif
-#ifndef MUHAX_WIFI_PASSWORD
-#define MUHAX_WIFI_PASSWORD ""
-#endif
-#ifndef MUHAX_WIFI_IP
-#define MUHAX_WIFI_IP ""
-#endif
-#ifndef MUHAX_WIFI_GATEWAY
-#define MUHAX_WIFI_GATEWAY ""
-#endif
-#ifndef MUHAX_WIFI_SUBNET
-#define MUHAX_WIFI_SUBNET ""
-#endif
-#ifndef MUHAX_WIFI_DNS
-#define MUHAX_WIFI_DNS ""
-#endif
-#ifndef MUHAX_GITHUB_OWNER
-#define MUHAX_GITHUB_OWNER ""
-#endif
-#ifndef MUHAX_GITHUB_REPO
-#define MUHAX_GITHUB_REPO ""
-#endif
-#ifndef MUHAX_GITHUB_BRANCH
-#define MUHAX_GITHUB_BRANCH "main"
-#endif
-#ifndef MUHAX_GITHUB_TOKEN
-#define MUHAX_GITHUB_TOKEN ""
-#endif
-
 // ---------------------------------------------------------------- pins
 #define PIN_LED_R 4
 #define PIN_LED_G 16
@@ -231,44 +200,20 @@ static void startNtp() {
   configTzTime(tz.c_str(), "pool.ntp.org", "time.google.com");
   lastResync = millis();
 }
-static bool configureStationNetwork(String* error = nullptr) {
-  String ipText = MUHAX_WIFI_IP;
-  if (!ipText.length()) return true;
-
-  IPAddress ip, gateway, subnet, dns;
-  if (!ip.fromString(ipText.c_str()) || !gateway.fromString(MUHAX_WIFI_GATEWAY) ||
-      !subnet.fromString(MUHAX_WIFI_SUBNET)) {
-    if (error) *error = "Static IP needs valid IP, gateway, and subnet values in the build environment.";
-    return false;
-  }
-  String dnsText = MUHAX_WIFI_DNS;
-  if (dnsText.length()) {
-    if (!dns.fromString(dnsText.c_str())) {
-      if (error) *error = "Static IP DNS value is invalid.";
-      return false;
-    }
-  } else dns = gateway;
-  if (!WiFi.config(ip, gateway, subnet, dns)) {
-    if (error) *error = "Could not apply the static IP configuration.";
-    return false;
-  }
-  return true;
-}
 
 // ---------------------------------------------------------------- config
 static void loadCfg() {
   prefs.begin("mx", true);
-  cfg.ssid = prefs.getString("ssid", MUHAX_WIFI_SSID);
-  cfg.wpass = prefs.getString("wpass", MUHAX_WIFI_PASSWORD);
+  cfg.ssid = prefs.getString("ssid", "");
+  cfg.wpass = prefs.getString("wpass", "");
   cfg.company = prefs.getString("co", "");
   cfg.au = prefs.getString("au", "");
   cfg.asalt = prefs.getString("as", "");
   cfg.ah = prefs.getString("ah", "");
-  cfg.gho = prefs.getString("gho", MUHAX_GITHUB_OWNER);
-  cfg.ghr = prefs.getString("ghr", MUHAX_GITHUB_REPO);
-  cfg.ghb = prefs.getString("ghb", MUHAX_GITHUB_BRANCH);
-  if (!cfg.ghb.length()) cfg.ghb = "main";
-  cfg.ght = prefs.getString("ght", MUHAX_GITHUB_TOKEN);
+  cfg.gho = prefs.getString("gho", "");
+  cfg.ghr = prefs.getString("ghr", "");
+  cfg.ghb = prefs.getString("ghb", "main");
+  cfg.ght = prefs.getString("ght", "");
   cfg.qrs = prefs.getString("qrs", "");
   cfg.cks = prefs.getString("cks", "");
   cfg.tzh = prefs.getInt("tz", 3);
@@ -1022,8 +967,6 @@ static void sTestWifi() {
   String password = server.arg("wp");
   if (!ssid.length()) { sendTestResult(false, "Enter a WiFi name first."); return; }
   if (!password.length() && ssid == cfg.ssid) password = cfg.wpass;
-  String networkError;
-  if (!configureStationNetwork(&networkError)) { sendTestResult(false, networkError); return; }
 
   WiFi.disconnect(false);
   delay(100);
@@ -1179,8 +1122,6 @@ static void startSetup() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
   WiFi.softAP(AP_SSID, apPass.c_str());
-  String networkError;
-  if (!configureStationNetwork(&networkError)) Serial.println(networkError);
   if (cfg.ssid.length()) WiFi.begin(cfg.ssid.c_str(), cfg.wpass.c_str());  // recovery: keep trying the saved network
   dns.start(53, "*", IPAddress(192, 168, 4, 1));
   routes();
@@ -1192,8 +1133,6 @@ static void startRun() {
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(MDNS_NAME);
   WiFi.setAutoReconnect(true);
-  String networkError;
-  if (!configureStationNetwork(&networkError)) Serial.println(networkError);
   WiFi.begin(cfg.ssid.c_str(), cfg.wpass.c_str());
   drawNotice("Connecting WiFi...", cfg.ssid, 0x2104);
   uint32_t t0 = millis();
