@@ -10,6 +10,7 @@
 #include <Preferences.h>
 #include <SD.h>
 #include <SPI.h>
+#include <ff.h>
 #include <TFT_eSPI.h>
 #include <qrcode.h>
 #include <ArduinoJson.h>
@@ -45,6 +46,7 @@ DNSServer dns;
 Preferences prefs;
 static bool sdOk = false;
 static bool setupMode = false;
+static volatile bool maintenanceMode = false;
 static String devId;
 static String apPass;
 static uint32_t restartAt = 0;
@@ -334,6 +336,117 @@ static void requestDatabaseUpload() {
   databaseUploadRequested = true;
   lastChange = 0;
 }
+static bool clearDirectory(const String& path) {
+  if (!SD.exists(path)) return true;
+  File dir = SD.open(path);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return false;
+  }
+
+  struct Entry {
+    String path;
+    bool directory;
+  };
+  std::vector<Entry> entries;
+  File entry = dir.openNextFile();
+  while (entry) {
+    String name = entry.name();
+    int slash = name.lastIndexOf('/');
+    if (slash >= 0) name = name.substring(slash + 1);
+    bool directory = entry.isDirectory();
+    entry.close();
+    if (!name.length()) {
+      dir.close();
+      return false;
+    }
+    if (name.length() && name != "." && name != "..")
+      entries.push_back({path + "/" + name, directory});
+    entry = dir.openNextFile();
+  }
+  dir.close();
+
+  for (const Entry& child : entries) {
+    if (child.directory) {
+      if (!clearDirectory(child.path) || !SD.rmdir(child.path)) return false;
+    } else if (!SD.remove(child.path)) {
+      return false;
+    }
+  }
+  return true;
+}
+static bool formatSdCard(String& error) {
+  maintenanceMode = true;
+  bool formatted = false;
+  {
+    Lock l(sdM);
+    if (!sdOk) {
+      error = "No SD card is available.";
+    } else {
+      uint8_t work[FF_MAX_SS];
+      // This firmware mounts its SD card as the first and only FAT volume.
+      f_mount(nullptr, "0:", 0);
+      FRESULT result = f_mkfs("0:", FM_ANY, 0, work, sizeof(work));
+      SD.end();
+      sdOk = SD.begin(SD_CS, sdSPI) && SD.cardType() != CARD_NONE;
+      if (result != FR_OK) {
+        error = "The SD card could not be formatted (FatFs error " + String((int)result) + ").";
+      } else if (!sdOk) {
+        error = "The card was formatted, but could not be mounted again.";
+      } else if (!SD.mkdir("/muhax") || !SD.mkdir("/muhax/logs")) {
+        error = "The card was formatted, but the logger folders could not be created.";
+      } else {
+        workers.clear();
+        formatted = true;
+      }
+    }
+  }
+  if (formatted) {
+    Lock l(pendM);
+    npend = 0;
+    workersDirty = false;
+    databaseUploadRequested = false;
+  } else {
+    maintenanceMode = false;
+  }
+  return formatted;
+}
+static bool factoryReset(String& error) {
+  maintenanceMode = true;
+  {
+    Lock l(sdM);
+    if (!sdOk) {
+      error = "Factory reset requires an available SD card so worker and attendance data can be erased.";
+      maintenanceMode = false;
+      return false;
+    }
+    if ((SD.exists("/muhax/workers.csv") && !SD.remove("/muhax/workers.csv")) ||
+        (SD.exists("/muhax/workers.tmp") && !SD.remove("/muhax/workers.tmp")) ||
+        !clearDirectory("/muhax/logs")) {
+      error = "Could not erase all worker and attendance files. Settings were not reset.";
+      maintenanceMode = false;
+      return false;
+    }
+    workers.clear();
+  }
+
+  bool opened = prefs.begin("mx", false);
+  bool cleared = opened && prefs.clear();
+  if (opened) prefs.end();
+  if (!cleared) {
+    error = "Worker and attendance data were erased, but device settings could not be reset.";
+    maintenanceMode = false;
+    return false;
+  }
+  {
+    Lock l(pendM);
+    npend = 0;
+    workersDirty = false;
+    databaseUploadRequested = false;
+  }
+  restartAt = millis() + 1500;
+  return true;
+}
 static bool appendLog(const Worker& w, const char* action, const String& phone) {
   time_t now = time(nullptr);
   String path = "/muhax/logs/" + fmtTime(now, "%Y-%m-%d") + ".csv";
@@ -443,7 +556,7 @@ static bool ghUploadDatabase() {
 static void ghTask(void*) {
   for (;;) {
     vTaskDelay(5000 / portTICK_PERIOD_MS);
-    if (setupMode || WiFi.status() != WL_CONNECTED || !timeOk()) continue;
+    if (setupMode || maintenanceMode || WiFi.status() != WL_CONNECTED || !timeOk()) continue;
     String day;
     bool wk = false;
     bool database = false;
@@ -909,6 +1022,7 @@ static void aExport() {
 static void aSystem() {
   NEED_ADMIN
   String note;
+  int responseCode = 200;
   if (server.method() == HTTP_POST) {
     String op = server.arg("op");
     if (op == "sync") { requestDatabaseUpload(); note = "<p>Full database upload queued.</p>"; }
@@ -918,12 +1032,48 @@ static void aSystem() {
       if (e > 1700000000) { struct timeval tv = {e, 0}; settimeofday(&tv, nullptr); lastSyncMs = millis() ? millis() : 1; lastWin = -1; needFull = true; note = "<p>Time set from your phone.</p>"; }
     } else if (op == "restart") { restartAt = millis() + 1500; note = "<p>Restarting...</p>"; }
     else if (op == "setup") { prefs.begin("mx", false); prefs.putBool("force", true); prefs.end(); restartAt = millis() + 1500; note = "<p>Going to setup mode...</p>"; }
+    else if (op == "format") {
+      if (server.arg("confirm") != "FORMAT") {
+        responseCode = 400;
+        note = "<p class=err>Type FORMAT exactly to confirm the SD card erase.</p>";
+      } else {
+        String error;
+        if (formatSdCard(error)) {
+          restartAt = millis() + 1500;
+          note = "<p>SD card formatted. All card data has been erased; the device is restarting.</p>";
+        } else {
+          responseCode = 500;
+          note = "<p class=err>" + esc(error) + "</p>";
+        }
+      }
+    } else if (op == "factory") {
+      if (server.arg("confirm") != "RESET") {
+        responseCode = 400;
+        note = "<p class=err>Type RESET exactly to confirm the factory reset.</p>";
+      } else {
+        String error;
+        if (factoryReset(error)) {
+          note = "<p>Factory reset complete. Settings, workers, and attendance logs were erased. The device is restarting in setup mode.</p>";
+        } else {
+          responseCode = 500;
+          note = "<p class=err>" + esc(error) + "</p>";
+        }
+      }
+    }
   }
   auto f = [](const char* op, const char* label, const char* cls = "") { return String("<form method=post><input type=hidden name=op value=") + op + "><button class='" + cls + "'>" + label + "</button></form>"; };
   String b = nav() + note + f("sync", "Upload database to GitHub now") + f("timesync", "Sync time now") +
              "<form method=post><input type=hidden name=op value=settime><input type=hidden name=epoch id=e><button onclick=\"document.getElementById('e').value=Math.floor(Date.now()/1000)\">Set time from my phone</button></form>" +
-             f("restart", "Restart") + f("setup", "Go to setup mode (settings page)", "r");
-  sendPage(200, "System", b);
+             f("restart", "Restart") + f("setup", "Go to setup mode (settings page)", "r") +
+             "<section class=panel><h2>Format SD card</h2><p>This formats the entire card and permanently erases all files, including files outside the logger.</p>"
+             "<form method=post onsubmit=\"return confirm('Format the entire SD card and erase every file?')\"><input type=hidden name=op value=format>"
+             "<label for=format-confirm>Type FORMAT to confirm</label><input id=format-confirm name=confirm autocomplete=off required>"
+             "<button class=r>Format SD card</button></form></section>"
+             "<section class=panel><h2>Factory reset</h2><p>Erases saved device settings, the worker roster, and attendance logs. Other files on the SD card are kept.</p>"
+             "<form method=post onsubmit=\"return confirm('Erase device settings, workers, and attendance logs?')\"><input type=hidden name=op value=factory>"
+             "<label for=reset-confirm>Type RESET to confirm</label><input id=reset-confirm name=confirm autocomplete=off required>"
+             "<button class=r>Factory reset</button></form></section>";
+  sendPage(responseCode, "System", b);
 }
 
 // ---------------------------------------------------------------- web: setup
